@@ -14,6 +14,26 @@ To make the app super fast and easy to maintain, we've split it into two main pi
 
 ---
 
+## How Everything Connects — From Your Browser to the Database
+
+This is probably the most important thing to understand before you start. The three layers of this application talk to each other in a very clean, predictable way. Here is the journey a request takes from the moment you click a button to the moment your data gets saved.
+
+**Step 1 — You interact with the React frontend.**
+When you log in, add a loan, or request a negotiation letter, the React app (running in your browser) prepares a request. It bundles your data into a standard JSON format and sends it over HTTP to the backend API. The address it sends to is whatever you set in `VITE_API_URL` inside the frontend's `.env` file.
+
+**Step 2 — The FastAPI backend receives your request.**
+The backend is the middleman. It gets your request, checks that you are authenticated (by verifying your JWT token), validates the data you sent, and then decides what to do with it. All the business logic — calculating debt stress scores, running settlement simulations, calling Gemini AI — happens here. The frontend never touches the database directly. Everything goes through the backend.
+
+**Step 3 — The backend talks to the database.**
+When data needs to be saved or fetched (like your loan records or letter history), the backend uses SQLAlchemy to speak to your PostgreSQL database. The database connection is configured entirely through the `DATABASE_URL` variable in the backend's `.env` file. You can point this at a local PostgreSQL instance for development, or at a cloud-hosted database like Neon for production. The backend handles creating all the tables automatically on startup — you don't need to run any migration scripts manually.
+
+**Step 4 — The response flows back to you.**
+Once the backend has the answer — whether that's your loan data, a debt score, or a freshly generated letter — it sends a clean JSON response back to the frontend. React then takes that data and renders it on screen.
+
+In short: the frontend is what you see, the backend is what thinks, and the database is what remembers.
+
+---
+
 ## 1. Local Development Setup
 
 Let's get the application up and replacing on your local machine.
