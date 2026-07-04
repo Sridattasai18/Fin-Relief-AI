@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2.0
+bcrypt
+python-jose[cryptography]
+python-multipart
+email-validator
+pydantic[email]
+google-generativeai
+aiofiles
