@@ -201,3 +201,117 @@ class TestSnapshotsByLoan:
         data = resp.json()
         assert len(data) >= 1
         assert all(s["loan_id"] == test_loan for s in data)
+
+
+# ---------------------------------------------------------------------------
+# Regression: Settlement/Letter amount consistency
+# Bug: letters.py was recomputing settlement_percentage independently instead
+# of reading the saved StressSnapshot, causing floating-point divergence
+# between the Settlement page amount and the letter's embedded amount.
+# Fix: letter generation reads settlement_percentage from the saved snapshot.
+# ---------------------------------------------------------------------------
+
+class TestLetterSettlementConsistency:
+    """
+    Regression tests for the settlement/letter data-consistency fix.
+
+    Covers the exact ICICI Bank scenario from the bug report:
+      outstanding=350000, emi=18000, overdue=74, income=30000, expenses=None
+    Both the settlement snapshot and the generated letter must embed
+    identical settlement amounts — to the rupee.
+    """
+
+    def _create_icici_loan(self, client, auth_headers):
+        """Create the exact loan from the bug report."""
+        resp = client.post("/loans", json={
+            "lender": "ICICI Bank",
+            "loan_type": "Personal loan",
+            "amount": 350000,
+            "emi": 18000,
+            "overdue_days": 74,
+            "income": 30000,
+        }, headers=auth_headers)
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    def test_letter_requires_prior_settlement_analysis(self, client, auth_headers):
+        """
+        Generating a letter without first running settlement must return 400
+        with a clear message — not silently recompute with potentially
+        different values.
+        """
+        loan_id = self._create_icici_loan(client, auth_headers)
+        resp = client.post(f"/letters/{loan_id}", headers=auth_headers)
+        assert resp.status_code == 400
+        assert "settlement analysis" in resp.json()["detail"].lower()
+
+    def test_settlement_amount_matches_letter_amount_exactly(self, client, auth_headers):
+        """
+        The settlement_amount shown on the Settlement page must equal the
+        amount embedded in the generated letter — to the rupee.
+
+        ICICI scenario: amount=350000, emi=18000, overdue=74, income=30000
+          dti = 18000/30000 * 100 = 60.0
+          expenses = 30000 * 0.4 = 12000
+          surplus = 30000 - 18000 - 12000 = 0
+          stress = 60*0.5 + (74/180)*40 + 0 = 30 + 16.444... = 46.444... → 46.4
+          settle_pct = 25 + 46.444...*0.35 = 41.255... → 41.3 (rounded to 1dp)
+          settlement_amount = round(350000 * 41.3 / 100, 2) = 144550.0
+        """
+        loan_id = self._create_icici_loan(client, auth_headers)
+
+        # Step 1: run and save settlement analysis
+        settle_resp = client.post(f"/settlement/{loan_id}", headers=auth_headers)
+        assert settle_resp.status_code == 200
+        settlement_data = settle_resp.json()
+        displayed_pct = settlement_data["settlement_percentage"]        # e.g. 41.3
+        displayed_amount = settlement_data["settlement_amount"]         # e.g. 144550.0
+
+        # Step 2: generate letter — must read the saved snapshot's pct
+        letter_resp = client.post(f"/letters/{loan_id}", headers=auth_headers)
+        assert letter_resp.status_code == 201
+        letter_data = letter_resp.json()
+
+        # The letter's stored settlement_pct must match the snapshot's exactly
+        assert letter_data["settlement_pct"] == displayed_pct, (
+            f"Letter settlement_pct {letter_data['settlement_pct']} != "
+            f"Settlement page pct {displayed_pct}"
+        )
+
+        # The amount embedded in the letter text must match to the rupee
+        # settlement_amount = round(350000 * displayed_pct / 100, 2)
+        expected_amount = round(350000 * displayed_pct / 100, 2)
+        assert expected_amount == displayed_amount, (
+            f"Settlement amount from pct ({expected_amount}) != "
+            f"displayed_amount ({displayed_amount})"
+        )
+
+        # Verify the amount actually appears in the letter text
+        # Format: "Rs. X,XX,XXX" (Indian number formatting with commas)
+        amount_int = int(expected_amount)
+        amount_str = f"{amount_int:,}"
+        assert amount_str in letter_data["letter_text"], (
+            f"Expected Rs. {amount_str} in letter text but not found.\n"
+            f"Letter pct={letter_data['settlement_pct']}, "
+            f"Settlement pct={displayed_pct}"
+        )
+
+    def test_second_letter_still_uses_snapshot(self, client, auth_headers):
+        """
+        Generating a second letter (re-generate) must still read the saved
+        snapshot, not recompute. Both letters for the same loan must have
+        identical settlement_pct values.
+        """
+        loan_id = self._create_icici_loan(client, auth_headers)
+
+        # Save settlement analysis
+        client.post(f"/settlement/{loan_id}", headers=auth_headers)
+
+        # Generate two letters
+        letter1 = client.post(f"/letters/{loan_id}", headers=auth_headers).json()
+        letter2 = client.post(f"/letters/{loan_id}", headers=auth_headers).json()
+
+        assert letter1["settlement_pct"] == letter2["settlement_pct"], (
+            "Two letters for the same loan must have identical settlement_pct"
+        )
+        assert letter2["version"] == letter1["version"] + 1, "Version should increment"

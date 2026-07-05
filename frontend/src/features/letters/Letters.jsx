@@ -67,8 +67,8 @@ function LetterHistoryItem({ letter, active, onClick }) {
           <Badge variant="neutral" style={{ fontSize: '0.6rem' }}>
             v{letter.version}
           </Badge>
-          <Badge variant={letter.source === 'AI' ? 'ai' : 'neutral'} style={{ fontSize: '0.6rem' }}>
-            {letter.source === 'AI' ? 'AI' : 'Template'}
+          <Badge variant={letter.source === 'gemini' ? 'ai' : 'neutral'} style={{ fontSize: '0.6rem' }}>
+            {letter.source === 'gemini' ? 'AI' : 'Template'}
           </Badge>
         </div>
       </div>

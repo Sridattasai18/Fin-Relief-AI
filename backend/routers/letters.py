@@ -6,10 +6,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database import get_db
-from models import Loan, User, Letter
+from models import Loan, User, Letter, StressSnapshot
 from schemas import LetterOut, LetterUpdate
 from auth import get_current_user
-from utils.calculations import compute_settlement_metrics
 from utils.gemini_client import generate_letter_body
 from utils.pdf_generator import generate_letter_pdf
 
@@ -24,6 +23,14 @@ def create_letter(
     """
     Generates a new negotiation letter (via Gemini or fallback template)
     for a given loan. Tracks and increments version history.
+
+    The settlement_percentage used in the letter is always read from the
+    most recently saved StressSnapshot — never recomputed independently.
+    This guarantees the letter amount matches exactly what the Settlement
+    page showed when the user saved their analysis.
+
+    If no snapshot exists yet (user skipped the Settlement page), a 400
+    is returned with a clear instruction to run the settlement analysis first.
     """
     loan = db.query(Loan).filter(Loan.id == loan_id, Loan.owner_id == current_user.id).first()
     if not loan:
@@ -32,15 +39,29 @@ def create_letter(
             detail="Loan not found."
         )
 
-    # Recompute server-side parameters to ensure consistency
-    metrics = compute_settlement_metrics(
-        income=loan.income,
-        emi=loan.emi,
-        overdue_days=loan.overdue_days,
-        amount=loan.amount,
-        monthly_expenses=loan.monthly_expenses
+    # Read settlement_percentage from the saved snapshot — never recompute.
+    # This is the single source of truth: the value the user saw on the
+    # Settlement page is the value that goes into the letter.
+    snapshot = (
+        db.query(StressSnapshot)
+        .filter(
+            StressSnapshot.loan_id == loan_id,
+            StressSnapshot.owner_id == current_user.id,
+        )
+        .order_by(StressSnapshot.created_at.desc())
+        .first()
     )
-    settlement_pct = metrics["settlement_percentage"]
+    if not snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "No settlement analysis found for this loan. "
+                "Please run and save a settlement analysis first, "
+                "then generate your letter."
+            ),
+        )
+
+    settlement_pct = snapshot.settlement_percentage
 
     # Generate letter body
     body, source = generate_letter_body(

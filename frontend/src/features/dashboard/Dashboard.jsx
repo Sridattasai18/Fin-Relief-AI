@@ -517,8 +517,8 @@ export default function Dashboard() {
                       <td style={{ padding: '12px 20px', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-ink)' }}>{l.lender}</td>
                       <td style={{ padding: '12px 20px', fontSize: '0.8125rem', fontFamily: 'var(--font-heading)', color: 'var(--color-ink)' }}>{Math.round(l.settlement_pct)}%</td>
                       <td style={{ padding: '12px 20px' }}>
-                        <Badge variant={l.source === 'AI' ? 'ai' : 'neutral'}>
-                          {l.source === 'AI' ? 'Gemini AI' : 'Offline Template'}
+                        <Badge variant={l.source === 'gemini' ? 'ai' : 'neutral'}>
+                          {l.source === 'gemini' ? 'Gemini AI' : 'Template'}
                         </Badge>
                       </td>
                     </tr>
