@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Calculator, FileText, Save, BadgeInfo, AlertCircle } from 'lucide-react'
 import client from '../../api/client'
@@ -13,8 +13,12 @@ import { stressLabel, stressColor } from '../../utils/stress'
 /* ── Animation helpers ──────────────────────────────────────── */
 function AnimatedNumber({ value, format = (v) => v }) {
   const [display, setDisplay] = useState(value)
+  const displayRef = useRef(display)
   useEffect(() => {
-    let start = display
+    displayRef.current = display
+  })
+  useEffect(() => {
+    let start = displayRef.current
     let end = value
     if (start === end) return
     let startTime = performance.now()

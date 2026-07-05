@@ -128,7 +128,7 @@ export default function Letters() {
     }
   }, [accountNumber])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const selectedLetter = letters.find(l => l.id === selectedId) || null
 
