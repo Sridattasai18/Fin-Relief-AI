@@ -1,4 +1,4 @@
-# FinRelief AI — AI-Powered Debt Relief & Financial Recovery Platform
+# FinRelief — AI Powered Debt Relief & Financial Recovery Platform
 
 For instructions on how to clone, configure, and run this project locally, or how to deploy it on Render and Vercel, see the [Setup and Deployment Guide](SETUP_AND_DEPLOYMENT.md).
 
